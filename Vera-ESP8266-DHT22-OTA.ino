@@ -16,6 +16,9 @@
 #define DHTPIN 4     // GPIO4
 #define DHTTYPE DHT22 
 
+//Atomic OTA Updates
+#define ATOMIC_FS_UPDATE
+
 // The ESP8266 RTC memory is arranged into blocks of 4 bytes. The access methods read and write 4 bytes at a time,
 // so the RTC data structure should be padded to a 4-byte multiple.
 struct {
@@ -34,7 +37,9 @@ DHT dht(DHTPIN, DHTTYPE);
 
 String ProgramVersion  = "0.1";
 
-float glb_temp=0,glb_hum=0,glb_batterylevel=0;
+float glb_temp=0,glb_hum=0;
+int glb_batterylevel=0;
+long glb_rssi=0;
 
 WiFiClient client;
 HTTPClient http;
@@ -182,28 +187,6 @@ int connect_wifi (){
 return wifiStatus;
 }
 
-void setup() {
-  //switch radio off to save energy
-  WiFi.mode(WIFI_OFF);
-  WiFi.forceSleepBegin();
-  
-  //Disable WiFi status LED to save battery
-  wifi_status_led_uninstall();
-  
-  delay(100);
-
-  Serial.begin(115200);
-  //Debug WiFi
-  Serial.setDebugOutput(false);
-  
-  dht.begin();
-
-  //Allow DHT22 time to refresh
-  delay(2000);
-
- Serial.print("\n" + String(ESPName) + " started\n");
-}
-
 int ReadSensor() {
   Serial.print("\nRequesting DHT22 temperature and humidity...\n");
 
@@ -224,7 +207,7 @@ int ReadSensor() {
   return 0;
 }
 
-float getBatteryStatus(){
+int getBatteryStatus(){
   glb_batterylevel=ESP.getVcc();
     
   Serial.println("Battery VCC: " + String(glb_batterylevel*0.001)+ "V");
@@ -242,6 +225,14 @@ float getBatteryStatus(){
 
   Serial.println("Battery level: " + String(glb_batterylevel) + "%");
     
+  return 0; 
+}
+
+int getRSSI(){
+  glb_rssi=WiFi.RSSI();
+
+  Serial.println("WiFi RSSI: " + String(glb_rssi) + "dBm");
+  
   return 0; 
 }
 
@@ -266,26 +257,52 @@ int GetHttpURL(String MyURL){
  return httpCode;
 }
 
-void loop() {
+void setup() {
+  //switch radio off to save energy
+  WiFi.mode(WIFI_OFF);
+  WiFi.forceSleepBegin();
+
+  //Disable WiFi status LED to save battery
+  wifi_status_led_uninstall();
+
+  delay(100);
+
+  Serial.begin(115200);
+  //Debug WiFi off
+  Serial.setDebugOutput(false);
+
+  dht.begin();
+
+  //Allow DHT22 time to refresh
+  delay(2000);
+
+ Serial.print("\n" + String(ESPName) + " started\n");
   int SensorStatus = ReadSensor(); 
 
   if (SensorStatus > 0) {
     GoToDeepSleep(sleepTimeS);
   }
 
-  int BatteryStatus = getBatteryStatus();
+  getBatteryStatus();
   
   // Connect WiFi
   connect_wifi();
 
+  getRSSI();
+
   http.setReuse(true);
   
   GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:upnp-org:serviceId:TemperatureSensor1&Variable=CurrentTemperature&Value=" + String(glb_temp));
+  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:upnp-org:serviceId:TemperatureSensor1&Variable=CurrentRSSI&Value=" + String(glb_rssi));
   GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraTempDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:HaDevice1&Variable=BatteryLevel&Value=" + String(glb_batterylevel));
   GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraHumDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:HumiditySensor1&Variable=CurrentLevel&Value=" + String(glb_hum));
 
   http.end();
   
   GoToDeepSleep(sleepTimeS);
+}
+
+void loop() {
+// Nothing Here
 }
 //EOF
