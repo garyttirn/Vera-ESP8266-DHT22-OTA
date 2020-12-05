@@ -95,7 +95,7 @@ int checkForUpdates() {
     ESPhttpUpdate.onError(update_error);
 
     if (glb_batterylevel < 50) {
-      Serial.print("\nBattery Level too low for OTA update"\n");
+      Serial.print("\nBattery Level too low for OTA update\n");
       return 1;
     }
 
